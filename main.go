@@ -14,15 +14,15 @@ func main() {
 	db := GetConnection()
 	defer db.Close()
 
-	createUser(db)
-	// getQueryContext(db)
-	// getQueryRowContext(db)
+	// createUser(db)
+	getQueryContext(db)
+	getQueryRowContext(db)
 
 }
 
 func GetConnection() *sql.DB {
 
-	db, err := sql.Open("mysql", "hanasa:@tcp(localhost:3306)/cms-tz-com")
+	db, err := sql.Open("mysql", "hanasa:@tcp(localhost:3306)/cms-tz-com?parseTime=true")
 
 	if err != nil {
 		panic(err)
@@ -38,7 +38,7 @@ func GetConnection() *sql.DB {
 func getQueryContext(db *sql.DB) {
 	ctx := context.Background()
 
-	sqlQuery := "SELECT id, name, email FROM users LIMIT 5"
+	sqlQuery := "SELECT id, name, email, email_verified_at, created_at  FROM users LIMIT 5"
 	rs, err := db.QueryContext(ctx, sqlQuery)
 
 	if err != nil {
@@ -52,11 +52,13 @@ func getQueryContext(db *sql.DB) {
 	for rs.Next() {
 		var id int64
 		var name, email string
+		var emailVerifiedAt sql.NullTime
+		var createdAt time.Time
 
-		if err := rs.Scan(&id, &name, &email); err != nil {
+		if err := rs.Scan(&id, &name, &email, &emailVerifiedAt, &createdAt); err != nil {
 			panic(err)
 		}
-		fmt.Println(id, name, "---", email)
+		fmt.Println(id, name, "|email: ", email, "|verified: ", emailVerifiedAt.Time, "|created: ", createdAt)
 	}
 	if err := rs.Err(); err != nil {
 		panic(err)
