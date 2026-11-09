@@ -7,14 +7,16 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
 	db := GetConnection()
 	defer db.Close()
 
-	getQueryContext(db)
-	getQueryRowContext(db)
+	createUser(db)
+	// getQueryContext(db)
+	// getQueryRowContext(db)
 
 }
 
@@ -49,8 +51,7 @@ func getQueryContext(db *sql.DB) {
 
 	for rs.Next() {
 		var id int64
-		var name string
-		var email string
+		var name, email string
 
 		if err := rs.Scan(&id, &name, &email); err != nil {
 			panic(err)
@@ -76,4 +77,33 @@ func getQueryRowContext(db *sql.DB) {
 
 	fmt.Println("----")
 	fmt.Printf("Show 5 users from total %d users", total)
+}
+
+func createUser(db *sql.DB) {
+	password, error := bcrypt.GenerateFromPassword([]byte("password"), 12)
+
+	if error != nil {
+		panic(error)
+	}
+
+	ctx := context.Background()
+	query := fmt.Sprintf("INSERT INTO users(name, email, username, password) VALUES ('hanasa2', 'hanasa2@hanasa.com', 'hanasa2', '%s')", string(password))
+	result, err := db.ExecContext(ctx, query)
+
+	if err != nil {
+		fmt.Println("Duplicate Entry")
+		// return
+		panic(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		panic(err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Inserted id=%d, rows affected=%d\n", id, affected)
 }
