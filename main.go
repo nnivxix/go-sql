@@ -18,9 +18,9 @@ func main() {
 	defer db.Close()
 
 	// createUser(db)
-	// getQueryContext(db)
-	// getQueryRowContext(db)
-	statementQuery(db)
+	getQueryContext(db)
+	getQueryRowContext(db)
+	// statementQuery(db)
 
 }
 
