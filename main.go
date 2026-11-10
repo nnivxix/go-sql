@@ -18,8 +18,9 @@ func main() {
 	defer db.Close()
 
 	// createUser(db)
-	getQueryContext(db)
-	getQueryRowContext(db)
+	// getQueryContext(db)
+	// getQueryRowContext(db)
+	statementQuery(db)
 
 }
 
@@ -53,7 +54,8 @@ func GetConnection() *sql.DB {
 func getQueryContext(db *sql.DB) {
 	ctx := context.Background()
 
-	sqlQuery := "SELECT id, name, email, email_verified_at, created_at  FROM users LIMIT 5"
+	sqlQuery := "SELECT id, name, email, created_at  FROM users ORDER BY `id` DESC LIMIT 5"
+
 	rs, err := db.QueryContext(ctx, sqlQuery)
 
 	if err != nil {
@@ -67,13 +69,12 @@ func getQueryContext(db *sql.DB) {
 	for rs.Next() {
 		var id int64
 		var name, email string
-		var emailVerifiedAt sql.NullTime
 		var createdAt time.Time
 
-		if err := rs.Scan(&id, &name, &email, &emailVerifiedAt, &createdAt); err != nil {
+		if err := rs.Scan(&id, &name, &email, &createdAt); err != nil {
 			panic(err)
 		}
-		fmt.Println(id, name, "|email: ", email, "|verified: ", emailVerifiedAt.Time, "|created: ", createdAt)
+		fmt.Println(id, name, "|email: ", email, "|created: ", createdAt)
 	}
 	if err := rs.Err(); err != nil {
 		panic(err)
@@ -93,13 +94,12 @@ func getQueryRowContext(db *sql.DB) {
 	row.Scan(&total)
 
 	fmt.Println("----")
-	fmt.Printf("Show 5 users from total %d users", total)
+	fmt.Printf("Show 5 users from total %d users\n", total)
 }
 
 func createUser(db *sql.DB) {
-	name := "hanasa2"
-	email := "hanasa2@hanasa.com"
-	username := "hanasa2"
+	name := "hanasa"
+	email := "hanasa@hanasa.com"
 	password, error := bcrypt.GenerateFromPassword([]byte("password"), 12)
 
 	if error != nil {
@@ -107,8 +107,8 @@ func createUser(db *sql.DB) {
 	}
 
 	ctx := context.Background()
-	query := "INSERT INTO users(name, email, username, password) VALUES (?, ?, ?, ?)"
-	result, err := db.ExecContext(ctx, query, name, email, username, password)
+	query := "INSERT INTO users(name, email, password) VALUES (?, ?, ?)"
+	result, err := db.ExecContext(ctx, query, name, email, password)
 
 	if err != nil {
 		fmt.Println("Duplicate Entry")
@@ -126,4 +126,44 @@ func createUser(db *sql.DB) {
 	}
 
 	fmt.Printf("Inserted id=%d, rows affected=%d\n", id, affected)
+}
+
+func statementQuery(db *sql.DB) {
+	ctx := context.Background()
+
+	lastUserIdQuery := "SELECT id FROM users ORDER BY id DESC LIMIT 1"
+	row := db.QueryRowContext(ctx, lastUserIdQuery)
+
+	var lastUserId int64
+	if err := row.Scan(&lastUserId); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("----")
+	fmt.Printf("Last user id: %d\n", lastUserId)
+
+	insertScript := "INSERT INTO posts(user_id, content) VALUES(?,?)"
+	statement, err := db.PrepareContext(ctx, insertScript)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer statement.Close()
+
+	for i := 0; i < 10; i++ {
+		content := fmt.Sprintf("Content %d", i+1)
+
+		rs, err := statement.ExecContext(ctx, lastUserId, content)
+		if err != nil {
+			panic(err)
+		}
+
+		id, err := rs.LastInsertId()
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("Content id => %d\n", id)
+	}
 }
