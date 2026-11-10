@@ -14,9 +14,9 @@ func main() {
 	db := GetConnection()
 	defer db.Close()
 
-	// createUser(db)
-	getQueryContext(db)
-	getQueryRowContext(db)
+	createUser(db)
+	// getQueryContext(db)
+	// getQueryRowContext(db)
 
 }
 
@@ -82,6 +82,9 @@ func getQueryRowContext(db *sql.DB) {
 }
 
 func createUser(db *sql.DB) {
+	name := "hanasa2"
+	email := "hanasa2@hanasa.com"
+	username := "hanasa2"
 	password, error := bcrypt.GenerateFromPassword([]byte("password"), 12)
 
 	if error != nil {
@@ -89,8 +92,8 @@ func createUser(db *sql.DB) {
 	}
 
 	ctx := context.Background()
-	query := fmt.Sprintf("INSERT INTO users(name, email, username, password) VALUES ('hanasa2', 'hanasa2@hanasa.com', 'hanasa2', '%s')", string(password))
-	result, err := db.ExecContext(ctx, query)
+	query := "INSERT INTO users(name, email, username, password) VALUES (?, ?, ?, ?)"
+	result, err := db.ExecContext(ctx, query, name, email, username, password)
 
 	if err != nil {
 		fmt.Println("Duplicate Entry")
