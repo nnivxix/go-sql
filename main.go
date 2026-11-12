@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,9 +19,12 @@ func main() {
 	defer db.Close()
 
 	// createUser(db)
-	getQueryContext(db)
-	getQueryRowContext(db)
+	// getQueryContext(db)
+	// getQueryRowContext(db)
 	// statementQuery(db)
+	if err := transactionDb(db); err != nil {
+		fmt.Println(err)
+	}
 
 }
 
@@ -166,4 +170,63 @@ func statementQuery(db *sql.DB) {
 
 		fmt.Printf("Content id => %d\n", id)
 	}
+}
+
+type User struct {
+	Name, Email, Password string
+}
+
+func transactionDb(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.Begin()
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+
+	// db execution
+
+	sqlScript := "INSERT INTO users(name, email, password) VALUES(?,?,?)"
+
+	var users = []User{
+		{
+			Name:     "John",
+			Email:    "john@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+		{
+			Name:     "Jane",
+			Email:    "jane@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+		{
+			Name:     "Jojon",
+			Email:    "jane@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+	}
+
+	for i, user := range users {
+		rs, err := tx.ExecContext(ctx, sqlScript, user.Name, user.Email, user.Password)
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+				return fmt.Errorf("insert error: %w (rollback juga error: %v)", err, rbErr)
+			}
+			return fmt.Errorf("insert error on index %d: %w", i, err)
+		}
+
+		id, err := rs.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("commit: %w", err)
+		}
+		fmt.Println("User id:", id)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		// tx.Rollback()
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+
 }
