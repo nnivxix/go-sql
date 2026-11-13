@@ -1,0 +1,203 @@
+package playground
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"go_sql/connection"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
+)
+
+func main() {
+	db := connection.GetConnection()
+	defer db.Close()
+
+	// createUser(db)
+	getQueryContext(db)
+	getQueryRowContext(db)
+	// statementQuery(db)
+	// if err := transactionDb(db); err != nil {
+	// 	fmt.Println(err)
+	// }
+
+}
+
+func getQueryContext(db *sql.DB) {
+	ctx := context.Background()
+
+	sqlQuery := "SELECT id, name, email, created_at  FROM users ORDER BY `id` DESC LIMIT 5"
+
+	rs, err := db.QueryContext(ctx, sqlQuery)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Showing 5 users")
+	fmt.Println("----")
+	defer rs.Close()
+
+	for rs.Next() {
+		var id int64
+		var name, email string
+		var createdAt time.Time
+
+		if err := rs.Scan(&id, &name, &email, &createdAt); err != nil {
+			panic(err)
+		}
+		fmt.Println(id, name, "|email: ", email, "|created: ", createdAt)
+	}
+	if err := rs.Err(); err != nil {
+		panic(err)
+	}
+
+}
+
+func getQueryRowContext(db *sql.DB) {
+	var total int
+	ctx := context.Background()
+	query := "SELECT COUNT(id) FROM users"
+	row := db.QueryRowContext(ctx, query)
+
+	if row.Err() != nil {
+		panic(row.Err())
+	}
+	row.Scan(&total)
+
+	fmt.Println("----")
+	fmt.Printf("Show 5 users from total %d users\n", total)
+}
+
+func createUser(db *sql.DB) {
+	name := "hanasa"
+	email := "hanasa@hanasa.com"
+	password, error := bcrypt.GenerateFromPassword([]byte("password"), 12)
+
+	if error != nil {
+		panic(error)
+	}
+
+	ctx := context.Background()
+	query := "INSERT INTO users(name, email, password) VALUES (?, ?, ?)"
+	result, err := db.ExecContext(ctx, query, name, email, password)
+
+	if err != nil {
+		fmt.Println("Duplicate Entry")
+		// return
+		panic(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		panic(err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Inserted id=%d, rows affected=%d\n", id, affected)
+}
+
+func statementQuery(db *sql.DB) {
+	ctx := context.Background()
+
+	lastUserIdQuery := "SELECT id FROM users ORDER BY id DESC LIMIT 1"
+	row := db.QueryRowContext(ctx, lastUserIdQuery)
+
+	var lastUserId int64
+	if err := row.Scan(&lastUserId); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("----")
+	fmt.Printf("Last user id: %d\n", lastUserId)
+
+	insertScript := "INSERT INTO posts(user_id, content) VALUES(?,?)"
+	statement, err := db.PrepareContext(ctx, insertScript)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer statement.Close()
+
+	for i := 0; i < 10; i++ {
+		content := fmt.Sprintf("Content %d", i+1)
+
+		rs, err := statement.ExecContext(ctx, lastUserId, content)
+		if err != nil {
+			panic(err)
+		}
+
+		id, err := rs.LastInsertId()
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("Content id => %d\n", id)
+	}
+}
+
+type User struct {
+	Name, Email, Password string
+}
+
+func transactionDb(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.Begin()
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+
+	// db execution
+
+	sqlScript := "INSERT INTO users(name, email, password) VALUES(?,?,?)"
+
+	var users = []User{
+		{
+			Name:     "John",
+			Email:    "john@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+		{
+			Name:     "Jane",
+			Email:    "jane@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+		{
+			Name:     "Jojon",
+			Email:    "jane@mail.com",
+			Password: "$2a$12$dgPKJrTABJdfF0CPTw7zk.CWhMwgAHDfG4qjf00UmtVTVLdr8UCHW",
+		},
+	}
+
+	for i, user := range users {
+		rs, err := tx.ExecContext(ctx, sqlScript, user.Name, user.Email, user.Password)
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+				return fmt.Errorf("insert error: %w (rollback juga error: %v)", err, rbErr)
+			}
+			return fmt.Errorf("insert error on index %d: %w", i, err)
+		}
+
+		id, err := rs.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("commit: %w", err)
+		}
+		fmt.Println("User id:", id)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		// tx.Rollback()
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+
+}
